@@ -1,0 +1,175 @@
+# Example Automations für Log Book Integration
+# Kopiere diese Beispiele in deine automations.yaml
+
+# 1. Licht-Änderungen loggen
+- alias: "Log Light Changes"
+  trigger:
+    platform: state
+    entity_id: light
+  action:
+    - service: log_book.log_event
+      data:
+        event_type: "device_action"
+        message: "{{ trigger.to_state.attributes.friendly_name }} → {{ trigger.to_state.state }}"
+        device: "{{ trigger.entity_id }}"
+        automation: "Log Light Changes"
+
+# 2. Schalter-Änderungen loggen
+- alias: "Log Switch Changes"
+  trigger:
+    platform: state
+    entity_id: switch
+  action:
+    - service: log_book.log_event
+      data:
+        event_type: "device_action"
+        message: "{{ trigger.to_state.attributes.friendly_name }} wurde {{ trigger.to_state.state }}"
+        device: "{{ trigger.entity_id }}"
+        automation: "{{ automation.alias }}"
+
+# 3. Türschloss-Änderungen
+- alias: "Log Lock Changes"
+  trigger:
+    platform: state
+    entity_id: lock
+  action:
+    - service: log_book.log_event
+      data:
+        event_type: "device_action"
+        message: |
+          {% if trigger.to_state.state == 'locked' %}
+            {{ trigger.to_state.attributes.friendly_name }} wurde gesperrt
+          {% else %}
+            {{ trigger.to_state.attributes.friendly_name }} wurde entsperrt
+          {% endif %}
+        device: "{{ trigger.entity_id }}"
+        automation: "{{ automation.alias }}"
+        metadata:
+          changed_by: "{{ state_attr(trigger.entity_id, 'changed_by') | default('unknown') }}"
+
+# 4. Temperatur-Alarme
+- alias: "Log High Temperature Alert"
+  trigger:
+    platform: numeric_state
+    entity_id: sensor.outdoor_temp
+    above: 30
+  action:
+    - service: log_book.log_event
+      data:
+        event_type: "alert"
+        message: "⚠️ Außentemperatur über 30°C: {{ states('sensor.outdoor_temp') }}°C"
+        device: "sensor.outdoor_temp"
+        automation: "{{ automation.alias }}"
+        metadata:
+          temperature: "{{ states('sensor.outdoor_temp') }}"
+          threshold: 30
+
+# 5. Präsenz-Tracking
+- alias: "Log User Home Arrival"
+  trigger:
+    platform: state
+    entity_id: person.alice
+    to: "home"
+  action:
+    - service: log_book.log_event
+      data:
+        event_type: "user_action"
+        message: "Alice ist nach Hause gekommen"
+        user: "Alice"
+        metadata:
+          battery_level: "{{ state_attr('person.alice', 'battery_level') | default('unknown') }}"
+
+- alias: "Log User Home Departure"
+  trigger:
+    platform: state
+    entity_id: person.alice
+    from: "home"
+  action:
+    - service: log_book.log_event
+      data:
+        event_type: "user_action"
+        message: "Alice hat das Haus verlassen"
+        user: "Alice"
+        metadata:
+          destination: "{{ states('person.alice') }}"
+
+# 6. Klimaanlage Änderungen
+- alias: "Log Climate Changes"
+  trigger:
+    platform: state
+    entity_id: climate.wohnzimmer
+    attribute: temperature
+  action:
+    - service: log_book.log_event
+      data:
+        event_type: "device_action"
+        message: "Klimaanlage Temperatur auf {{ states('climate.wohnzimmer') }}°C gesetzt"
+        device: "climate.wohnzimmer"
+        automation: "{{ automation.alias }}"
+        metadata:
+          target_temp: "{{ state_attr('climate.wohnzimmer', 'temperature') }}"
+          current_temp: "{{ state_attr('climate.wohnzimmer', 'current_temperature') }}"
+
+# 7. Sensor-Warnung Batterie
+- alias: "Log Low Battery Sensor"
+  trigger:
+    platform: numeric_state
+    entity_id: sensor.movement_battery
+    below: 20
+  action:
+    - service: log_book.log_event
+      data:
+        event_type: "alert"
+        message: "🔋 Bewegungsmelder Batterie schwach: {{ states('sensor.movement_battery') }}%"
+        device: "sensor.movement_battery"
+        automation: "{{ automation.alias }}"
+        metadata:
+          battery_level: "{{ states('sensor.movement_battery') }}"
+
+# 8. Strom-Verbrauch Spitzen
+- alias: "Log High Power Consumption"
+  trigger:
+    platform: numeric_state
+    entity_id: sensor.total_power_usage
+    above: 5000
+  action:
+    - service: log_book.log_event
+      data:
+        event_type: "alert"
+        message: "⚡ Hoher Stromverbrauch: {{ states('sensor.total_power_usage') }}W"
+        device: "sensor.total_power_usage"
+        automation: "{{ automation.alias }}"
+        metadata:
+          power_usage: "{{ states('sensor.total_power_usage') }}"
+          timestamp: "{{ now() }}"
+
+# 9. Manuelle Service-Aufrufe (z.B. von Button Card oder Script)
+- alias: "Manual Device Control Log"
+  trigger:
+    platform: state
+    entity_id: input_boolean.manual_control
+    to: "on"
+  action:
+    - service: log_book.log_event
+      data:
+        event_type: "user_action"
+        message: "Manuelles Geräte-Steuerelement aktiviert"
+        user: "{{ user | default('Admin') }}"
+        automation: "{{ automation.alias }}"
+
+# 10. Datensicherungs-Logs
+- alias: "Log Backup Completion"
+  trigger:
+    platform: event
+    event_type: call_service
+    event_data:
+      domain: backup
+      service: create
+  action:
+    - service: log_book.log_event
+      data:
+        event_type: "system_action"
+        message: "🔄 Home Assistant Backup gestartet"
+        automation: "{{ automation.alias }}"
+        metadata:
+          backup_time: "{{ now() }}"

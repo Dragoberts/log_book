@@ -1,0 +1,39 @@
+{
+  "title": "Log Book",
+  "services": {
+    "log_event": {
+      "name": "Log Event",
+      "description": "Log a custom event",
+      "fields": {
+        "event_type": {
+          "name": "Event Type",
+          "description": "Type of event (e.g., device_action, automation_trigger)"
+        },
+        "message": {
+          "name": "Message",
+          "description": "Detailed message about the event"
+        },
+        "user": {
+          "name": "User",
+          "description": "User who triggered the event (optional)"
+        },
+        "device": {
+          "name": "Device",
+          "description": "Device affected by the event (optional)"
+        },
+        "entity": {
+          "name": "Entity",
+          "description": "Entity affected by the event (optional, e.g., light.wohnzimmer, switch.küche)"
+        },
+        "automation": {
+          "name": "Automation",
+          "description": "Automation that triggered the event (optional)"
+        },
+        "metadata": {
+          "name": "Metadata",
+          "description": "Additional metadata as JSON (optional)"
+        }
+      }
+    }
+  }
+}
