@@ -56,7 +56,7 @@ Der Server holt fortlaufend neue Events sowie Automation-Traces live aus Home As
 ## 📦 Installation über HACS
 
 1. HACS → **⋮** → *Benutzerdefinierte Repositories*
-2. Repository-URL eintragen: `https://github.com/YOUR_GITHUB_USERNAME/log_book`
+2. Repository-URL eintragen: `https://github.com/Dragoberts/log_book`
    — Kategorie **Integration**
 3. „Log Book" installieren und Home Assistant neu starten.
 

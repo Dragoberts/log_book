@@ -1,13 +1,13 @@
 {
   "domain": "log_book",
   "name": "Log Book",
-  "codeowners": ["@YOUR_GITHUB_USERNAME"],
+  "codeowners": ["@Dragoberts"],
   "config_flow": false,
   "dependencies": [],
-  "documentation": "https://github.com/YOUR_GITHUB_USERNAME/log_book",
+  "documentation": "https://github.com/Dragoberts/log_book",
   "integration_type": "service",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/YOUR_GITHUB_USERNAME/log_book/issues",
+  "issue_tracker": "https://github.com/Dragoberts/log_book/issues",
   "requirements": ["requests", "websocket-client"],
   "version": "0.2.0"
 }
