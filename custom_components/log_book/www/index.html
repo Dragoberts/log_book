@@ -1733,6 +1733,8 @@
         let liveSeenMaxId = 0;           // highest id seen by the live poller (for alerts)
         let liveTimer = null;
         const BASE_URL = '/api/log_book';
+        // Running inside the Home Assistant sidebar panel? (vs. the standalone server)
+        const IN_HA = location.pathname.indexOf('log_book_frontend') !== -1 || window.self !== window.top;
 
         // Theme Management
         function initTheme() {
@@ -1947,11 +1949,22 @@
             initFiltersToggle();
             initCustomDropdowns();
             initDateRangePicker();
+            restoreSettings();          // restore persisted filters/search/toggles first
             loadFilters();
             loadLogs();
             renderHiddenLogs();
             updateWatchlistCount();
-            startLive();
+
+            if (IN_HA) {
+                // Inside HA: no manual button, seamless background live refresh
+                const btn = document.getElementById('refresh-btn');
+                if (btn) btn.style.display = 'none';
+                startHaLive();
+            } else {
+                // Standalone: keep the manual "Aktualisieren" button + new-count poller
+                startLive();
+            }
+
             // Ask once for notification permission (for watchlist alerts)
             if (window.Notification && Notification.permission === 'default') {
                 setTimeout(() => Notification.requestPermission().catch(() => {}), 3000);
@@ -2814,7 +2827,7 @@
             return `${y}-${m}-${day}`;
         }
 
-        async function loadLogs() {
+        function buildLogParams() {
             const user = document.getElementById('filter-user').value;
             const device = document.getElementById('filter-device').value;
             const entity = document.getElementById('filter-entity').value;
@@ -2831,28 +2844,33 @@
                 ...(dateRangeStart && { date_from: toLocalDateStr(dateRangeStart) }),
                 ...(dateRangeEnd && { date_to: toLocalDateStr(dateRangeEnd) }),
             });
-            // Automation mode: failed -> only blocked automations; success -> hide them
             if (automationMode === 'failed') {
                 params.set('event_type', 'automation_failed');
             } else {
                 params.set('exclude_event_type', 'automation_failed');
                 if (eventType) params.set('event_type', eventType);
             }
-            // "Alle anzeigen" off -> only logs that have a process chain
             if (!showAll) params.set('chain_only', '1');
-            // Full-text search
             if (searchQuery) params.set('q', searchQuery);
-            // Exclude hidden entities/messages server-side (applies on ALL pages)
             hiddenItems.forEach(i => params.append('hidden', i.key));
+            return params;
+        }
 
+        async function fetchLogs() {
+            const response = await fetch(`${BASE_URL}/logs?${buildLogParams()}`);
+            return await response.json();
+        }
+
+        function renderLogs(data) {
+            displayLogs(data.logs);
+            updatePagination(data.offset, logsPerPage, data.logs.length);
+            if (currentPage === 0) resetLiveBaseline();
+        }
+
+        async function loadLogs() {
+            saveSettings();  // persist current filters/search/toggles
             try {
-                const response = await fetch(`${BASE_URL}/logs?${params}`);
-                const data = await response.json();
-
-                displayLogs(data.logs);
-                updatePagination(data.offset, logsPerPage, data.logs.length);
-                // Reset the live "new logs" baseline to the real current max id
-                if (currentPage === 0) resetLiveBaseline();
+                renderLogs(await fetchLogs());
             } catch (error) {
                 showError(`Fehler beim Laden der Logs: ${error.message}`);
             }
@@ -3088,6 +3106,78 @@
         function startLive() {
             if (liveTimer) clearInterval(liveTimer);
             liveTimer = setInterval(pollLive, 10000);
+        }
+
+        // ---- Home Assistant panel: seamless live auto-refresh every 5s ----
+        // Prefetch the new data at ~3.5s in the background, swap it in at 5s -> no jank.
+        let _livePrefetch = null, _liveT1 = null, _liveT2 = null;
+
+        function liveBusy() {
+            if (currentPage !== 0) return true;
+            if (document.querySelector('.dropdown-menu.open, .date-picker-calendar.open')) return true;
+            if (document.getElementById('chain-overlay').classList.contains('open')) return true;
+            if (document.getElementById('device-overlay').classList.contains('open')) return true;
+            const a = document.activeElement;
+            if (a && (a.classList && a.classList.contains('filter-input') || a.id === 'global-search')) return true;
+            return false;
+        }
+
+        function startHaLive() {
+            const cycle = () => {
+                _liveT1 = setTimeout(async () => {
+                    if (!liveBusy()) {
+                        try { _livePrefetch = await fetchLogs(); } catch (e) { _livePrefetch = null; }
+                    }
+                }, 3500);
+                _liveT2 = setTimeout(() => {
+                    if (_livePrefetch && !liveBusy()) renderLogs(_livePrefetch);
+                    _livePrefetch = null;
+                    cycle();
+                }, 5000);
+            };
+            cycle();
+        }
+
+        // ---- Persist filters / search / toggles across panel navigation ----
+        const SETTINGS_KEY = 'logbook-settings';
+        function _gv(id) { const e = document.getElementById(id); return e ? e.value : ''; }
+        function saveSettings() {
+            try {
+                localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+                    showAll, automationMode, searchQuery,
+                    user: _gv('filter-user'), device: _gv('filter-device'),
+                    entity: _gv('filter-entity'), automation: _gv('filter-automation'),
+                    eventType: _gv('filter-event-type'),
+                    dateFrom: dateRangeStart ? toLocalDateStr(dateRangeStart) : null,
+                    dateTo: dateRangeEnd ? toLocalDateStr(dateRangeEnd) : null,
+                }));
+            } catch (e) { /* ignore */ }
+        }
+        function restoreSettings() {
+            let s;
+            try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch (e) { s = {}; }
+            if (typeof s.showAll === 'boolean') {
+                showAll = s.showAll;
+                const cb = document.getElementById('show-all-checkbox');
+                if (cb) cb.checked = showAll;
+            }
+            if (s.automationMode) {
+                automationMode = s.automationMode;
+                document.getElementById('auto-mode-success').classList.toggle('active', automationMode === 'success');
+                document.getElementById('auto-mode-failed').classList.toggle('active', automationMode === 'failed');
+            }
+            if (s.searchQuery) {
+                searchQuery = s.searchQuery;
+                const el = document.getElementById('global-search');
+                if (el) { el.value = s.searchQuery; document.getElementById('search-clear').style.display = 'inline-block'; }
+            }
+            const setv = (id, v) => { if (v) { const e = document.getElementById(id); if (e) e.value = v; } };
+            setv('filter-user', s.user); setv('filter-device', s.device);
+            setv('filter-entity', s.entity); setv('filter-automation', s.automation);
+            setv('filter-event-type', s.eventType);
+            if (s.dateFrom) dateRangeStart = new Date(s.dateFrom + 'T00:00:00');
+            if (s.dateTo) dateRangeEnd = new Date(s.dateTo + 'T00:00:00');
+            if (dateRangeStart) updateDateRangeDisplay();
         }
 
         function showToast(icon, title, text, logId) {

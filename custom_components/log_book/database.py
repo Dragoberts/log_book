@@ -97,6 +97,25 @@ class LogDatabase:
 
         return log_id
 
+    def add_logs_batch(self, rows: list) -> None:
+        """Insert many rows in a single transaction.
+
+        Each row: (timestamp, event_type, message, user, device, entity,
+                   automation, metadata_json)
+        """
+        if not rows:
+            return
+        conn = sqlite3.connect(self.db_path, timeout=10)
+        try:
+            conn.executemany(
+                "INSERT INTO logs (timestamp, event_type, message, user, device, entity, automation, metadata) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
     def get_logs(
         self,
         limit: int = 100,
