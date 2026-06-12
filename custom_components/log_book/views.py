@@ -64,36 +64,15 @@ class CountView(_Base):
         return self.json(data)
 
 
-# --- Phase 2 stubs (return safe defaults so the UI degrades gracefully) ---
-
 class ChainView(_Base):
     url = "/api/log_book/chain"
     name = "api:log_book:chain"
 
     async def get(self, request):
+        hass = request.app["hass"]
         log_id = request.query.get("id")
-        # Phase 1: chain reconstruction (via context.parent_id) follows in Phase 2
-        return self.json({
-            "target": {"id": log_id, "message": "", "timestamp": "", "metadata": {}},
-            "causes": [], "automation": None, "effects": [],
-            "note": "Die Prozess-Topologie wird in Phase 2 ergänzt.", "nearby": [],
-        })
-
-
-class TraceView(_Base):
-    url = "/api/log_book/trace"
-    name = "api:log_book:trace"
-
-    async def get(self, request):
-        return self.json({"available": False, "reason": "phase2"})
-
-
-class PatternsView(_Base):
-    url = "/api/log_book/patterns"
-    name = "api:log_book:patterns"
-
-    async def get(self, request):
-        return self.json({"findings": [], "count": 0})
+        data = await hass.async_add_executor_job(query.get_chain, self.db_path, log_id)
+        return self.json(data)
 
 
 class EntityStatsView(_Base):
@@ -105,14 +84,44 @@ class EntityStatsView(_Base):
         entity = request.query.get("entity")
         if not entity:
             return self.json({"error": "no entity"})
-        res = await hass.async_add_executor_job(
-            lambda: query.get_logs(self.db_path, entity=entity, limit=30)
-        )
+        data = await hass.async_add_executor_job(query.get_entity_stats, self.db_path, entity)
+        return self.json(data)
+
+
+class PatternsView(_Base):
+    url = "/api/log_book/patterns"
+    name = "api:log_book:patterns"
+
+    async def get(self, request):
+        hass = request.app["hass"]
+        entity = request.query.get("entity")
+        if not entity:
+            return self.json({"findings": [], "count": 0})
+        data = await hass.async_add_executor_job(query.get_patterns, self.db_path, entity)
+        return self.json(data)
+
+
+class TraceView(_Base):
+    """Automation traces require deeper HA-internal access - deferred. Degrades gracefully."""
+    url = "/api/log_book/trace"
+    name = "api:log_book:trace"
+
+    async def get(self, request):
+        return self.json({"available": False, "reason": "not yet implemented in native mode"})
+
+
+class AutomationView(_Base):
+    """Automation config view - deferred. Returns a 'not available' shape so the UI degrades."""
+    url = "/api/log_book/automation"
+    name = "api:log_book:automation"
+
+    async def get(self, request):
+        entity = request.query.get("entity")
         return self.json({
-            "entity": entity, "device": entity, "total": len(res["logs"]),
-            "first": None, "last": None, "by_type": [], "top_users": [], "top_causes": [],
-            "_recent": res["logs"],
+            "entity": entity, "friendly_name": entity, "config_available": False,
+            "config_error": "Konfiguration im nativen Modus noch nicht verfügbar",
         })
 
 
-ALL_VIEWS = [LogsView, FiltersView, CountView, ChainView, TraceView, PatternsView, EntityStatsView]
+ALL_VIEWS = [LogsView, FiltersView, CountView, ChainView, EntityStatsView,
+             PatternsView, TraceView, AutomationView]

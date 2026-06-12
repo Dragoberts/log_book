@@ -66,29 +66,43 @@ class LogCollector:
             if domain == "person":
                 self.person_map = build_person_map(self.hass)
 
-            user_name = self.person_map.get(getattr(ctx, "user_id", None))
+            user_ctx = self.person_map.get(getattr(ctx, "user_id", None))
 
-            if domain == "automation":
-                event_type = "automation_triggered"
-            elif user_name:
+            # Categorize so the filters are correct:
+            #   person.*     -> a USER (presence), not a device
+            #   automation.* -> fills the "Automatisierung" filter
+            #   everything else -> a device/entity, attributed to a user if one acted
+            user = None
+            device = None
+            automation = None
+            if domain == "person":
                 event_type = "user_action"
+                user = friendly  # the person's name
+            elif domain == "automation":
+                event_type = "automation_triggered"
+                automation = friendly
+                device = friendly
             else:
-                event_type = "state_change"
+                device = friendly
+                if user_ctx:
+                    event_type = "user_action"
+                    user = user_ctx
+                else:
+                    event_type = "state_change"
 
-            device = friendly
             message = f"{friendly}: {state}"
 
             metadata = {
                 "context_id": getattr(ctx, "id", None),
                 "context_parent_id": getattr(ctx, "parent_id", None),
                 "context_user_id": getattr(ctx, "user_id", None),
-                "context_user_name": user_name,
+                "context_user_name": user_ctx or (user if domain == "person" else None),
                 "state": state,
             }
 
             # Write off the event loop
             self.hass.async_add_executor_job(
-                self.db.add_log, event_type, message, user_name, device, entity_id, None, metadata
+                self.db.add_log, event_type, message, user, device, entity_id, automation, metadata
             )
         except Exception as err:  # pragma: no cover - never break the event loop
             _LOGGER.debug("Log Book collector error: %s", err)
