@@ -86,6 +86,21 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     collector.async_start()
     hass.data[DOMAIN]["collector"] = collector
 
+    # 5b) One-time historical backfill from the recorder (after HA has started,
+    #     so the recorder is ready). Populates users + topology for past events.
+    async def _do_backfill(_event=None):
+        try:
+            from .backfill import async_backfill
+            await async_backfill(hass, database, collector, days=3)
+        except Exception as err:  # pragma: no cover
+            _LOGGER.warning("Log Book: backfill error: %s", err)
+
+    try:
+        from homeassistant.helpers.start import async_at_started
+        async_at_started(hass, _do_backfill)
+    except Exception:
+        hass.async_create_task(_do_backfill())
+
     # 6) Manual logging service (optional)
     async def handle_log_event(call: ServiceCall) -> None:
         await hass.async_add_executor_job(
