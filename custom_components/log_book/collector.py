@@ -98,7 +98,12 @@ class LogCollector:
         if domain == "person":
             self.person_map = build_person_map(self.hass)
 
-        user_ctx = self.person_map.get(getattr(ctx, "user_id", None))
+        uid = getattr(ctx, "user_id", None)
+        user_ctx = self.person_map.get(uid)
+        # Lazy refresh: person entities may not have been loaded at setup time
+        if uid and not user_ctx:
+            self.person_map = build_person_map(self.hass)
+            user_ctx = self.person_map.get(uid)
 
         user = device = automation = None
         if domain == "person":

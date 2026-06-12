@@ -72,27 +72,49 @@ def _build_rows(states_dict, person_map):
     return rows
 
 
-async def async_backfill(hass, db, collector, days=3):
-    """Import the last `days` of recorder history - only if our DB is empty."""
+def _clear_logs(db_path):
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.execute("DELETE FROM logs")
+        conn.commit()
+        conn.close()
+    except Exception as err:
+        _LOGGER.warning("Log Book: clear failed: %s", err)
+
+
+async def async_backfill(hass, db, collector, days=3, force=False):
+    """Import the last `days` of recorder history. Skips if DB already has rows
+    unless force=True (manual reimport)."""
     existing = await hass.async_add_executor_job(_count_rows, db.db_path)
-    if existing:
-        _LOGGER.info("Log Book: DB has %d rows - skipping backfill", existing)
+    if existing and not force:
+        _LOGGER.warning("Log Book backfill: DB already has %d rows - skipping "
+                        "(call service log_book.reimport to force).", existing)
         return
+    if force and existing:
+        await hass.async_add_executor_job(_clear_logs, db.db_path)
 
     try:
         from homeassistant.components.recorder import history, get_instance
         import homeassistant.util.dt as dt_util
     except Exception as err:
-        _LOGGER.warning("Log Book: recorder unavailable, no backfill: %s", err)
+        _LOGGER.warning("Log Book backfill: recorder unavailable: %s", err)
         return
+
+    # Refresh the person map now that HA is started (persons are loaded)
+    try:
+        from .collector import build_person_map
+        collector.person_map = build_person_map(hass)
+    except Exception:
+        pass
 
     start = dt_util.utcnow() - timedelta(days=days)
     end = dt_util.utcnow()
+    entity_ids = list(hass.states.async_entity_ids())  # modern recorder needs explicit ids
+    _LOGGER.warning("Log Book backfill: importing %d days for %d entities…", days, len(entity_ids))
 
     def _fetch():
         return history.get_significant_states(
-            hass, start, end,
-            entity_ids=None,
+            hass, start, end, entity_ids,
             include_start_time_state=False,
             significant_changes_only=True,
             minimal_response=False,
@@ -102,13 +124,14 @@ async def async_backfill(hass, db, collector, days=3):
     try:
         states_dict = await get_instance(hass).async_add_executor_job(_fetch)
     except Exception as err:
-        _LOGGER.warning("Log Book: backfill query failed: %s", err)
+        _LOGGER.warning("Log Book backfill: query failed: %s", err)
         return
 
     person_map = collector.person_map or {}
     rows = await hass.async_add_executor_job(_build_rows, states_dict, person_map)
+    # how many rows actually carry context (for chains)?
+    with_ctx = sum(1 for r in rows if '"context_parent_id": null' not in r[7])
     if rows:
         await hass.async_add_executor_job(db.add_logs_batch, rows)
-        _LOGGER.info("Log Book: backfilled %d historical events (%d days)", len(rows), days)
-    else:
-        _LOGGER.info("Log Book: backfill produced no rows")
+    _LOGGER.warning("Log Book backfill: done - %d events imported (%d with context for chains).",
+                    len(rows), with_ctx)

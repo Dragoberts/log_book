@@ -1,0 +1,46 @@
+log_event:
+  name: Log event
+  description: Manually add an entry to the Log Book.
+  fields:
+    event_type:
+      name: Event type
+      required: true
+      example: device_action
+      selector:
+        text:
+    message:
+      name: Message
+      required: true
+      example: "Light turned on"
+      selector:
+        text:
+    user:
+      name: User
+      selector:
+        text:
+    device:
+      name: Device
+      selector:
+        text:
+    entity:
+      name: Entity
+      selector:
+        entity:
+    automation:
+      name: Automation
+      selector:
+        text:
+
+reimport:
+  name: Re-import history
+  description: Clear the Log Book database and re-import the last N days from the recorder.
+  fields:
+    days:
+      name: Days
+      description: How many days of history to import.
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 30
+          mode: box

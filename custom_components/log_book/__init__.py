@@ -127,5 +127,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         }),
     )
 
+    # Manual re-import: clears the DB and re-imports recorder history on demand
+    async def handle_reimport(call: ServiceCall) -> None:
+        from .backfill import async_backfill
+        days = int(call.data.get("days", 3))
+        await async_backfill(hass, database, collector, days=days, force=True)
+
+    hass.services.async_register(
+        DOMAIN, "reimport", handle_reimport,
+        schema=vol.Schema({vol.Optional("days", default=3): vol.Coerce(int)}),
+    )
+
     _LOGGER.info("Log Book set up - panel at /%s (token-free)", PANEL_URL_PATH)
     return True
