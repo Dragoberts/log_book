@@ -37,9 +37,13 @@ class LogsView(_Base):
             chain_only=qs.get("chain_only"),
             hidden=qs.getall("hidden", []),
         )
-        data = await hass.async_add_executor_job(
-            lambda: query.get_logs(self.db_path, **kwargs)
-        )
+        try:
+            data = await hass.async_add_executor_job(
+                lambda: query.get_logs(self.db_path, **kwargs)
+            )
+        except Exception as err:
+            _LOGGER.error("LogsView error: %s", err)
+            data = {"logs": [], "limit": kwargs["limit"], "offset": kwargs["offset"]}
         return self.json(data)
 
 
@@ -49,7 +53,11 @@ class FiltersView(_Base):
 
     async def get(self, request):
         hass = request.app["hass"]
-        data = await hass.async_add_executor_job(query.get_filters, self.db_path)
+        try:
+            data = await hass.async_add_executor_job(query.get_filters, self.db_path)
+        except Exception as err:
+            _LOGGER.error("FiltersView error: %s", err)
+            data = {"users": [], "devices": [], "entities": [], "automations": [], "event_types": []}
         return self.json(data)
 
 
@@ -60,7 +68,11 @@ class CountView(_Base):
     async def get(self, request):
         hass = request.app["hass"]
         since = request.query.get("since_id", 0)
-        data = await hass.async_add_executor_job(query.get_count, self.db_path, since)
+        try:
+            data = await hass.async_add_executor_job(query.get_count, self.db_path, since)
+        except Exception as err:
+            _LOGGER.error("CountView error: %s", err)
+            data = {"new": 0, "max_id": 0}
         return self.json(data)
 
 
@@ -71,7 +83,11 @@ class ChainView(_Base):
     async def get(self, request):
         hass = request.app["hass"]
         log_id = request.query.get("id")
-        data = await hass.async_add_executor_job(query.get_chain, self.db_path, log_id)
+        try:
+            data = await hass.async_add_executor_job(query.get_chain, self.db_path, log_id)
+        except Exception as err:
+            _LOGGER.error("ChainView error: %s", err)
+            data = {"error": str(err)}
         return self.json(data)
 
 
@@ -84,7 +100,11 @@ class EntityStatsView(_Base):
         entity = request.query.get("entity")
         if not entity:
             return self.json({"error": "no entity"})
-        data = await hass.async_add_executor_job(query.get_entity_stats, self.db_path, entity)
+        try:
+            data = await hass.async_add_executor_job(query.get_entity_stats, self.db_path, entity)
+        except Exception as err:
+            _LOGGER.error("EntityStatsView error: %s", err)
+            data = {"entity": entity, "total": 0, "by_type": [], "top_users": [], "top_causes": []}
         return self.json(data)
 
 
@@ -97,7 +117,11 @@ class PatternsView(_Base):
         entity = request.query.get("entity")
         if not entity:
             return self.json({"findings": [], "count": 0})
-        data = await hass.async_add_executor_job(query.get_patterns, self.db_path, entity)
+        try:
+            data = await hass.async_add_executor_job(query.get_patterns, self.db_path, entity)
+        except Exception as err:
+            _LOGGER.error("PatternsView error: %s", err)
+            data = {"findings": [], "count": 0}
         return self.json(data)
 
 

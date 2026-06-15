@@ -107,6 +107,13 @@ class LogDatabase:
             return
         conn = sqlite3.connect(self.db_path, timeout=10)
         try:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS logs ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                "timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,"
+                "event_type TEXT NOT NULL, message TEXT NOT NULL,"
+                "user TEXT, device TEXT, entity TEXT, automation TEXT, metadata TEXT)"
+            )
             conn.executemany(
                 "INSERT INTO logs (timestamp, event_type, message, user, device, entity, automation, metadata) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

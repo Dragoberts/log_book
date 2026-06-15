@@ -2,6 +2,29 @@
 import json
 import sqlite3
 
+_CREATE_LOGS = """
+CREATE TABLE IF NOT EXISTS logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    event_type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    user TEXT,
+    device TEXT,
+    entity TEXT,
+    automation TEXT,
+    metadata TEXT
+)
+"""
+
+def _open(db_path):
+    """Open DB and ensure the logs table exists (defensive: init may have been skipped)."""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute(_CREATE_LOGS)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON logs(timestamp DESC)")
+    conn.commit()
+    return conn
+
 
 def _row_to_log(row):
     return {
@@ -22,8 +45,7 @@ def get_logs(db_path, *, limit=50, offset=0, user=None, device=None, entity=None
              date_from=None, date_to=None, q=None, chain_only=None, hidden=None):
     limit = min(int(limit or 50), 1000000)
     offset = int(offset or 0)
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
+    conn = _open(db_path)
     cur = conn.cursor()
 
     query = "SELECT * FROM logs WHERE 1=1"
@@ -66,7 +88,7 @@ def get_logs(db_path, *, limit=50, offset=0, user=None, device=None, entity=None
 
 
 def get_filters(db_path):
-    conn = sqlite3.connect(db_path)
+    conn = _open(db_path)
     cur = conn.cursor()
 
     def distinct(col):
@@ -85,7 +107,7 @@ def get_filters(db_path):
 
 
 def get_count(db_path, since_id=0):
-    conn = sqlite3.connect(db_path)
+    conn = _open(db_path)
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM logs WHERE id > ?", (int(since_id or 0),))
     new = cur.fetchone()[0] or 0
@@ -119,8 +141,7 @@ def _node_from_log(log):
 
 
 def get_chain(db_path, log_id):
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
+    conn = _open(db_path)
     cur = conn.cursor()
     cur.execute("SELECT * FROM logs WHERE id = ?", (int(log_id),))
     row = cur.fetchone()
@@ -202,8 +223,7 @@ def get_chain(db_path, log_id):
 # ---------------- Device detail stats ----------------
 
 def get_entity_stats(db_path, entity):
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
+    conn = _open(db_path)
     cur = conn.cursor()
 
     cur.execute("SELECT COUNT(*) c, MIN(timestamp) mn, MAX(timestamp) mx FROM logs WHERE entity = ?", (entity,))
@@ -239,8 +259,7 @@ def get_entity_stats(db_path, entity):
 # ---------------- Pattern detection ----------------
 
 def get_patterns(db_path, entity):
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
+    conn = _open(db_path)
     cur = conn.cursor()
     cur.execute("SELECT timestamp FROM logs WHERE entity = ? ORDER BY timestamp ASC", (entity,))
     times = []
